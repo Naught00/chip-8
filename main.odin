@@ -6,10 +6,16 @@ import "core:fmt"
 print :: fmt.println
 
 /* Operations */
-LD_I :: 0xA0
-JP :: 0x10
-CALL :: 0x20
-SE :: 0x30
+LD_I_addr   :: 0xA0
+JP_addr     :: 0x10
+CALL_addr   :: 0x20
+SE_vx_byte  :: 0x30
+SNE_vx_byte :: 0x40
+SE_vx_vy    :: 0x50
+LD_vx_byte  :: 0x60
+ADD_vx_byte :: 0x70
+SNE_vx_vy   :: 0x90
+
 
 stack : [16]u16
 ram : [4096]u8
@@ -67,12 +73,13 @@ main :: proc() {
 
 	for x, i in program {
 		if i % 2 == 0 {
-			fmt.println()
+		//	fmt.println()
 		}
 
-		fmt.printf("{:X} ", x)
+		//fmt.printf("{:X} ", x)
 	}
 
+	//prog := []u8{0x82, 0x03}
 	load_program(program)
 	cpu.program_counter = 0x200
 
@@ -90,25 +97,175 @@ main :: proc() {
 	
 
 		switch operation {
-		case LD_I:
+		case LD_I_addr:
 			value := get_value(cpu.program_counter)
 			cpu_set_register_I(&cpu, value)
 			print(cpu.I)
 
-		case JP:
+		case JP_addr:
 			cpu.program_counter = get_value(cpu.program_counter)
 			print("pc : ", cpu.program_counter)
 			fmt.printf("pc {:X} ", cpu.program_counter)
-			exit(0)
-			continue
+
+			//@HACK
+			os.exit(0)
 
 
-		case CALL:
+		case CALL_addr:
 			cpu.stack_pointer += 1
 			stack[cpu.stack_pointer] = cpu.program_counter
-		case SE:
+			cpu.program_counter = get_value(cpu.program_counter)
+			continue
 
+		case SE_vx_byte:
+			print("SE")
+			low_bits: u8 = ram[cpu.program_counter] & 0b00001111
+
+			fmt.printf("low {:8b} ", low_bits)
+			print(low_bits)
+
+			// Not sure yet
+			//low_bits = low_bits << 4
+			//fmt.printf("low {:8b} ", low_bits)
+			//print(low_bits)
+
+			next_byte := ram[cpu.program_counter + 1]
+
+			if cpu.registers[low_bits] == next_byte {
+				cpu.program_counter += 2
+			}
+
+		case SNE_vx_byte:
+			print("SNE")
+			low_bits: u8 = ram[cpu.program_counter] & 0b00001111
+
+			fmt.printf("low {:8b} ", low_bits)
+			print(low_bits)
+
+			next_byte := ram[cpu.program_counter + 1]
+
+			if cpu.registers[low_bits] != next_byte {
+				cpu.program_counter += 2
+			}
+
+		case SE_vx_vy:
+			low_bits: u8 = ram[cpu.program_counter] & 0b00001111
+
+			next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+			if cpu.registers[low_bits] == cpu.registers[next_byte_high_bits] {
+				cpu.program_counter += 2
+			}
+
+		case LD_vx_byte:
+			low_bits: u8 = ram[cpu.program_counter] & 0b00001111
+			cpu.registers[low_bits] = ram[cpu.program_counter + 1]
+
+		case ADD_vx_byte:
+			low_bits: u8 = ram[cpu.program_counter] & 0b00001111
+			cpu.registers[low_bits] += ram[cpu.program_counter + 1]
+
+		case 0x80:
+			next_byte_low_bits := ram[cpu.program_counter + 1] & 0b00001111
+			print("here")
+
+			switch next_byte_low_bits {
+			
+			// LD_vx_vy
+			case 0x0:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+				cpu.registers[low_bits] = cpu.registers[next_byte_high_bits]
+
+			// OR Vx, Vy
+			case 0x1:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				cpu.registers[low_bits] = cpu.registers[low_bits] | cpu.registers[next_byte_high_bits]
+			case 0x2:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				cpu.registers[low_bits] = cpu.registers[low_bits] & cpu.registers[next_byte_high_bits]
+			// XOR 
+			case 0x3:
+				print("XOR!")
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				cpu.registers[low_bits] = cpu.registers[low_bits] ~ cpu.registers[next_byte_high_bits]
+			// ADD Vx, Vy, vf
+			case 0x4:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				temp := cpu.registers[low_bits] + cpu.registers[next_byte_high_bits]
+				if temp > 255 {
+					cpu.VF = 1
+				} else {
+					cpu.VF = 0
+				}
+
+				cpu.registers[low_bits] = temp & 0b00001111
+
+			case 0x5:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				if cpu.registers[low_bits] > cpu.registers[next_byte_high_bits] {
+					cpu.VF = 1
+				} else {
+					cpu.VF = 0
+				}
+
+				cpu.registers[low_bits] -= cpu.registers[next_byte_high_bits] 
+			case 0x6:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				if cpu.registers[low_bits] & 0b00000001 == 1 {
+					cpu.VF = 1
+				} else {
+					cpu.VF = 0
+				}
+
+				cpu.registers[low_bits] /= 2
+			case 0x7:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				if cpu.registers[next_byte_high_bits] > cpu.registers[low_bits] {
+					cpu.VF = 1
+				} else {
+					cpu.VF = 0
+				}
+
+				cpu.registers[low_bits] = cpu.registers[next_byte_high_bits] - cpu.registers[low_bits]
+
+			case 0xE:
+				low_bits := ram[cpu.program_counter] & 0b00001111
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				if cpu.registers[low_bits] & 0b10000000 == 128 {
+					cpu.VF = 1
+				} else {
+					cpu.VF = 0
+				}
+
+				cpu.registers[low_bits] /= 2
+			}
+		case SNE_vx_vy:
+			low_bits := ram[cpu.program_counter] & 0b00001111
+
+			next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+			if cpu.registers[low_bits] != cpu.registers[next_byte_high_bits] {
+				cpu.program_counter += 2
+			}
+			
 		}
+			
 
 		cpu.program_counter += 2
 			
