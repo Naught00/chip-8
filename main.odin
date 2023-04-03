@@ -2,6 +2,8 @@ package chip
 
 import "core:os"
 import "core:fmt"
+import "core:math/rand"
+import "core:time"
 
 print :: fmt.println
 
@@ -15,10 +17,30 @@ SE_vx_vy    :: 0x50
 LD_vx_byte  :: 0x60
 ADD_vx_byte :: 0x70
 SNE_vx_vy   :: 0x90
+JP_v0_addr  :: 0xB0
+RND_vx_byte :: 0xC0
+
+/* Sprites */
+sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
+		0x20, 0x60, 0x20, 0x20, 0x70,
+		0xF0, 0x10, 0xF0, 0x80, 0xF0,
+		0xF0, 0x10, 0xF0, 0x10, 0xF0,
+		0x90, 0x90, 0xF0, 0x10, 0x10,
+		0xF0, 0x80, 0xF0, 0x10, 0xF0,
+		0xF0, 0x80, 0xF0, 0x90, 0xF0,
+		0xF0, 0x10, 0x20, 0x40, 0x40,
+		0xF0, 0x90, 0xF0, 0x90, 0xF0,
+		0xF0, 0x90, 0xF0, 0x10, 0xF0,
+		0xF0, 0x90, 0xF0, 0x90, 0x90,
+		0xE0, 0x90, 0xE0, 0x90, 0xE0,
+		0xF0, 0x80, 0x80, 0x80, 0xF0,
+		0xE0, 0x90, 0x90, 0x90, 0xE0,
+		0xF0, 0x80, 0xF0, 0x80, 0xF0,
+		0xF0, 0x80, 0xF0, 0x80, 0x80}
 
 
-stack : [16]u16
-ram : [4096]u8
+stack: [16]u16
+ram: [4096]u8
 
 
 //operations_determine :: proc(op_code: u8) -> operations {
@@ -62,12 +84,21 @@ load_program :: proc(program: []u8) {
 		ram[0x200 + i] = byte
 	}
 }
+
+load_sprites :: proc() {
+	for i in 0x000..=79 {
+		ram[i] = sprites[i]
+	}
+}
+
+
+
+
 print_ram :: proc() {
-	for x, i in ram do fmt.printf("ADDR: {:X}: %d\n", i, x)
+	for x, i in ram do fmt.printf("ADDR: {:X}: {:X}\n", i, x)
 }
 
 main :: proc() {
-
 	program, success := os.read_entire_file_from_filename("fizz.ch8")
 	cpu: Cpu
 
@@ -81,9 +112,11 @@ main :: proc() {
 
 	//prog := []u8{0x82, 0x03}
 	load_program(program)
+	load_sprites()
+	print_ram()
 	cpu.program_counter = 0x200
 
-	for ; cpu.program_counter < u16(len(program)) + 0x200 - 2; {
+	for ; cpu.program_counter < u16(len(program)) + 0x200; {
 
 		print()
 		print()
@@ -264,6 +297,18 @@ main :: proc() {
 				cpu.program_counter += 2
 			}
 			
+		case JP_v0_addr:
+			cpu.program_counter = get_value(cpu.program_counter) + u16(cpu.registers[0])
+
+		case RND_vx_byte:
+			r := rand.create(u64(time.time_to_unix(time.now())))
+
+			num := u8(rand.uint32(&r))
+
+			low_bits := ram[cpu.program_counter] & 0b00001111
+
+			cpu.registers[low_bits] = num & ram[cpu.program_counter + 1]
+
 		}
 			
 
