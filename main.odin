@@ -45,7 +45,6 @@ sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
 stack: [16]u16
 ram: [4096]u8
 
-//@TODO MAKE STRUCT
 window: ^sdl2.Window
 renderer: ^sdl2.Renderer
 
@@ -83,8 +82,6 @@ get_value :: proc(pc: u16) -> u16 {
 	return value
 }
 
-
-
 load_program :: proc(program: []u8) {
 	for byte, i in program {
 		ram[0x200 + i] = byte
@@ -103,6 +100,10 @@ print_ram :: proc() {
 
 main :: proc() {
 	program, success := os.read_entire_file_from_filename("fizz.ch8")
+	if !success {
+		os.exit(1)
+	}
+
 	cpu: Cpu
 
 	for x, i in program {
@@ -113,14 +114,19 @@ main :: proc() {
 		//fmt.printf("{:X} ", x)
 	}
 
-	prog := []u8{0xD0, 0x05}
+	prog := []u8{0xD0, 0x15}
 	load_program(prog)
 	load_sprites()
 	print_ram()
+
+	/* CHIP-8 programs start at 0x200 */
 	cpu.program_counter = 0x200
 
 	renderer, window = display_init()
-	i :u16 = 0
+	defer sdl2.DestroyWindow(window)
+	defer sdl2.DestroyRenderer(renderer)
+
+	//i :u16 = 0
 	//for _ in 0..<15 {
 	//	display_sprite(5, 0x0 + i, 0 + u8(i), 10)
 	//	i += 5
@@ -128,9 +134,10 @@ main :: proc() {
 
 	sdl2.RenderPresent(renderer)
 
-	cpu.I = 65
+	cpu.registers[0] = 64
+	cpu.registers[1] = 32
 
-	for ; cpu.program_counter < u16(len(program)) + 0x200; {
+	for cpu.program_counter < u16(len(program)) + 0x200 {
 
 		event: sdl2.Event
 		for sdl2.PollEvent(&event) {
@@ -144,10 +151,6 @@ main :: proc() {
 			}
 
 		}
-
-		print()
-		print()
-		print()
 
 		fmt.printf("HEX: {:8b}\n", ram[cpu.program_counter])
 
@@ -337,16 +340,35 @@ main :: proc() {
 			cpu.registers[low_bits] = num & ram[cpu.program_counter + 1]
 
 
+		//@TODO collision
 		case DRW_vx_vy:
 			x := ram[cpu.program_counter] & 0b00001111
 			y := ram[cpu.program_counter + 1] & 0b11110000
+			print("y", y)
+			y = y >> 4
+			print("y", y)
 
 			n := ram[cpu.program_counter + 1] & 0b00001111
 
+			vx := cpu.registers[x]
+			vy := cpu.registers[y]
+			
+
+			if vx > 63 {
+				vx %= 64
+			}
+
+			if vy > 31 {
+				vy %= 32
+			}
+
+			cpu.VF = 0
+
 			fmt.println(x, y, n)
 			print(cpu.I)
-			display_sprite(n, cpu.I, x, y)
+			display_sprite(n, cpu.I, vx, vy)
 			sdl2.RenderPresent(renderer)
+
 			fmt.print("here")
 			event: sdl2.Event
 			for sdl2.WaitEvent(&event) {
