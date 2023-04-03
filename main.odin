@@ -20,6 +20,8 @@ ADD_vx_byte :: 0x70
 SNE_vx_vy   :: 0x90
 JP_v0_addr  :: 0xB0
 RND_vx_byte :: 0xC0
+DRW_vx_vy   :: 0xD0
+	
 
 /* Sprites */
 sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
@@ -43,6 +45,7 @@ sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
 stack: [16]u16
 ram: [4096]u8
 
+//@TODO MAKE STRUCT
 window: ^sdl2.Window
 renderer: ^sdl2.Renderer
 
@@ -110,18 +113,22 @@ main :: proc() {
 		//fmt.printf("{:X} ", x)
 	}
 
-	//prog := []u8{0x82, 0x03}
-	load_program(program)
+	prog := []u8{0xD0, 0x05}
+	load_program(prog)
 	load_sprites()
 	print_ram()
 	cpu.program_counter = 0x200
 
 	renderer, window = display_init()
-	display_sprite(5, 0x0, 10, 10)
-	display_sprite(5, 0x0 + 5, 20, 10)
-	display_sprite(5, 0x0 + 10, 30, 10)
+	i :u16 = 0
+	//for _ in 0..<15 {
+	//	display_sprite(5, 0x0 + i, 0 + u8(i), 10)
+	//	i += 5
+	//}
 
 	sdl2.RenderPresent(renderer)
+
+	cpu.I = 65
 
 	for ; cpu.program_counter < u16(len(program)) + 0x200; {
 
@@ -328,6 +335,31 @@ main :: proc() {
 			low_bits := ram[cpu.program_counter] & 0b00001111
 
 			cpu.registers[low_bits] = num & ram[cpu.program_counter + 1]
+
+
+		case DRW_vx_vy:
+			x := ram[cpu.program_counter] & 0b00001111
+			y := ram[cpu.program_counter + 1] & 0b11110000
+
+			n := ram[cpu.program_counter + 1] & 0b00001111
+
+			fmt.println(x, y, n)
+			print(cpu.I)
+			display_sprite(n, cpu.I, x, y)
+			sdl2.RenderPresent(renderer)
+			fmt.print("here")
+			event: sdl2.Event
+			for sdl2.WaitEvent(&event) {
+				#partial switch event.type {
+				case .QUIT:
+					return
+				case .KEYDOWN:
+					if event.key.keysym.scancode == sdl2.SCANCODE_Q {
+						return
+					}
+				}
+
+			}
 
 		}
 			

@@ -40,17 +40,16 @@ display_draw :: proc(x: i32, y: i32) {
 	}
 }
 
-display_sprite :: proc(n: u16, I: u16, x, y:u8) {
-	for i, j in I..<I+n {
+display_sprite :: proc(n: u8, I: u16, x, y:u8) {
+	for i, j in I..<I+u16(n) {
 		byte := ram[i]
 
-		mask: u8 = 1
+		mask: u8 = 128
 		for i in 0..=7 {
 			if bool(byte & mask) { 
-				fmt.print("here")
 				display_draw(i32(x + u8(i)), i32(y + u8(j)))
 			}
-			mask *= 2 
+			mask /= 2 
 		}
 	}
 }
