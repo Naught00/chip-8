@@ -4,6 +4,7 @@ import "core:os"
 import "core:fmt"
 import "core:math/rand"
 import "core:time"
+import "vendor:sdl2"
 
 print :: fmt.println
 
@@ -42,6 +43,8 @@ sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
 stack: [16]u16
 ram: [4096]u8
 
+window: ^sdl2.Window
+renderer: ^sdl2.Renderer
 
 //operations_determine :: proc(op_code: u8) -> operations {
 //	switch op_code {
@@ -86,16 +89,13 @@ load_program :: proc(program: []u8) {
 }
 
 load_sprites :: proc() {
-	for i in 0x000..=79 {
-		ram[i] = sprites[i]
+	for byte, i in sprites {
+		ram[i] = byte
 	}
 }
 
-
-
-
 print_ram :: proc() {
-	for x, i in ram do fmt.printf("ADDR: {:X}: {:X}\n", i, x)
+	for x, i in ram do fmt.printf("ADDR: {:X}: {:8b}\n", i, x)
 }
 
 main :: proc() {
@@ -116,7 +116,27 @@ main :: proc() {
 	print_ram()
 	cpu.program_counter = 0x200
 
+	renderer, window = display_init()
+	display_sprite(5, 0x0, 10, 10)
+	display_sprite(5, 0x0 + 5, 20, 10)
+	display_sprite(5, 0x0 + 10, 30, 10)
+
+	sdl2.RenderPresent(renderer)
+
 	for ; cpu.program_counter < u16(len(program)) + 0x200; {
+
+		event: sdl2.Event
+		for sdl2.PollEvent(&event) {
+			#partial switch event.type {
+			case .QUIT:
+				return
+			case .KEYDOWN:
+				if event.key.keysym.scancode == sdl2.SCANCODE_Q {
+					return
+				}
+			}
+
+		}
 
 		print()
 		print()
@@ -141,7 +161,7 @@ main :: proc() {
 			fmt.printf("pc {:X} ", cpu.program_counter)
 
 			//@HACK
-			os.exit(0)
+			//os.exit(0)
 
 
 		case CALL_addr:
