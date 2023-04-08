@@ -98,7 +98,7 @@ main :: proc() {
 	if len(os.args) > 1 do filename = os.args[1]
 
 	// @DEBUG
-	filename = "programs/fishie.ch8"
+	filename = "programs/fizz.ch8"
 	program, success := os.read_entire_file_from_filename(filename)
 
 	if !success {
@@ -117,9 +117,13 @@ main :: proc() {
 	}
 
 	// @DEBUG
-	//prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0x00, 0xEE}
+	prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0xF2, 0x33, 0xF2, 0x55}
 
-	load_program(program)
+	cpu.registers[0] = 255
+	cpu.registers[1] = 255
+	cpu.registers[2] = 255
+
+	load_program(prog)
 	load_sprites()
 	print_ram()
 
@@ -394,6 +398,7 @@ main :: proc() {
 
 		case 0xF0:
 			x := ram[cpu.program_counter] & 0b00001111
+			print("0xF0")
 			vx := u16(cpu.registers[x])
 
 			switch ram[cpu.program_counter + 1] {
@@ -419,6 +424,31 @@ main :: proc() {
 
 				print(addr)
 				cpu.I = addr
+			
+			case 0x33:
+				print("0x33")
+				x := ram[cpu.program_counter] & 0b00001111
+
+				vx := cpu.registers[x] 
+
+				ram[cpu.I] = (vx - (vx % 100)) / 100
+				ram[cpu.I + 1] = (vx % 100 - (vx % 10)) / 10
+				ram[cpu.I + 2] = vx % 10
+
+				print(vx)
+				print(ram[cpu.I])
+				print(ram[cpu.I + 1])
+				print(ram[cpu.I + 2])
+
+
+			case 0x55:
+				x := ram[cpu.program_counter] & 0b00001111
+
+				print("0x55")
+				for i in 0..=x {
+					ram[cpu.I + u16(i)] = cpu.registers[i]
+				}
+
 			}
 
 		case 0x00:
@@ -438,6 +468,7 @@ main :: proc() {
 
 		cpu.program_counter += 2
 		sdl2.RenderPresent(renderer)
-		time.sleep(16 * 1000 * 1000)
+		print_ram()
+		time.sleep(1000 * 1000 * 1000)
 	}
 }
