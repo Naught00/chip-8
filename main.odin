@@ -9,6 +9,8 @@ import "vendor:sdl2"
 print :: fmt.println
 
 /* Operations */
+CLR         :: 0xE0 
+RET         :: 0xEE
 LD_I_addr   :: 0xA0
 JP_addr     :: 0x10
 CALL_addr   :: 0x20
@@ -21,6 +23,7 @@ SNE_vx_vy   :: 0x90
 JP_v0_addr  :: 0xB0
 RND_vx_byte :: 0xC0
 DRW_vx_vy   :: 0xD0
+LD_vx_delay :: 0xF0 
 	
 
 /* Sprites */
@@ -47,14 +50,6 @@ ram: [4096]u8
 
 window: ^sdl2.Window
 renderer: ^sdl2.Renderer
-
-//operations_determine :: proc(op_code: u8) -> operations {
-//	switch op_code {
-//	case 0xA0:
-//		return operations.LD_I
-//	}
-//	return operations.LD_I
-//}
 
 Cpu :: struct {
 	registers: [16]u8,
@@ -99,8 +94,15 @@ print_ram :: proc() {
 }
 
 main :: proc() {
-	program, success := os.read_entire_file_from_filename("fizz.ch8")
+	filename: string
+	if len(os.args) > 1 do filename = os.args[1]
+
+	// @DEBUG
+	filename = "programs/fishie.ch8"
+	program, success := os.read_entire_file_from_filename(filename)
+
 	if !success {
+		fmt.eprintln("Invalid filename") 
 		os.exit(1)
 	}
 
@@ -108,14 +110,16 @@ main :: proc() {
 
 	for x, i in program {
 		if i % 2 == 0 {
-		//	fmt.println()
+			fmt.println()
 		}
 
-		//fmt.printf("{:X} ", x)
+		fmt.printf("{:X} ", x)
 	}
 
-	prog := []u8{0xD0, 0x15}
-	load_program(prog)
+	// @DEBUG
+	//prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0x00, 0xEE}
+
+	load_program(program)
 	load_sprites()
 	print_ram()
 
@@ -123,8 +127,10 @@ main :: proc() {
 	cpu.program_counter = 0x200
 
 	renderer, window = display_init()
-	defer sdl2.DestroyWindow(window)
-	defer sdl2.DestroyRenderer(renderer)
+	defer {
+		sdl2.DestroyWindow(window)
+		sdl2.DestroyRenderer(renderer)
+	}
 
 	//i :u16 = 0
 	//for _ in 0..<15 {
@@ -134,11 +140,7 @@ main :: proc() {
 
 	sdl2.RenderPresent(renderer)
 
-	cpu.registers[0] = 64
-	cpu.registers[1] = 32
-
 	for cpu.program_counter < u16(len(program)) + 0x200 {
-
 		event: sdl2.Event
 		for sdl2.PollEvent(&event) {
 			#partial switch event.type {
@@ -149,7 +151,6 @@ main :: proc() {
 					return
 				}
 			}
-
 		}
 
 		fmt.printf("HEX: {:8b}\n", ram[cpu.program_counter])
@@ -157,7 +158,6 @@ main :: proc() {
 		operation := ram[cpu.program_counter] & 0b11110000
 		
 		fmt.printf("HEX: {:X}\n", operation)
-	
 
 		switch operation {
 		case LD_I_addr:
@@ -172,7 +172,6 @@ main :: proc() {
 
 			//@HACK
 			//os.exit(0)
-
 
 		case CALL_addr:
 			cpu.stack_pointer += 1
@@ -216,6 +215,8 @@ main :: proc() {
 
 			next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
 
+			next_byte_high_bits = next_byte_high_bits >> 4
+
 			if cpu.registers[low_bits] == cpu.registers[next_byte_high_bits] {
 				cpu.program_counter += 2
 			}
@@ -233,35 +234,44 @@ main :: proc() {
 			print("here")
 
 			switch next_byte_low_bits {
-			
 			// LD_vx_vy
 			case 0x0:
 				low_bits := ram[cpu.program_counter] & 0b00001111
-				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
-				cpu.registers[low_bits] = cpu.registers[next_byte_high_bits]
 
+				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+				next_byte_high_bits = next_byte_high_bits >> 4
+
+				cpu.registers[low_bits] = cpu.registers[next_byte_high_bits]
 			// OR Vx, Vy
 			case 0x1:
 				low_bits := ram[cpu.program_counter] & 0b00001111
+
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+				next_byte_high_bits = next_byte_high_bits >> 4
 
 				cpu.registers[low_bits] = cpu.registers[low_bits] | cpu.registers[next_byte_high_bits]
 			case 0x2:
 				low_bits := ram[cpu.program_counter] & 0b00001111
+
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+				next_byte_high_bits = next_byte_high_bits >> 4
 
 				cpu.registers[low_bits] = cpu.registers[low_bits] & cpu.registers[next_byte_high_bits]
 			// XOR 
 			case 0x3:
 				print("XOR!")
 				low_bits := ram[cpu.program_counter] & 0b00001111
+
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+				next_byte_high_bits = next_byte_high_bits >> 4
 
 				cpu.registers[low_bits] = cpu.registers[low_bits] ~ cpu.registers[next_byte_high_bits]
 			// ADD Vx, Vy, vf
 			case 0x4:
 				low_bits := ram[cpu.program_counter] & 0b00001111
+
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+				next_byte_high_bits = next_byte_high_bits >> 4
 
 				temp := cpu.registers[low_bits] + cpu.registers[next_byte_high_bits]
 				if temp > 255 {
@@ -276,6 +286,8 @@ main :: proc() {
 				low_bits := ram[cpu.program_counter] & 0b00001111
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
 
+				next_byte_high_bits = next_byte_high_bits >> 4
+
 				if cpu.registers[low_bits] > cpu.registers[next_byte_high_bits] {
 					cpu.VF = 1
 				} else {
@@ -283,9 +295,12 @@ main :: proc() {
 				}
 
 				cpu.registers[low_bits] -= cpu.registers[next_byte_high_bits] 
+
 			case 0x6:
 				low_bits := ram[cpu.program_counter] & 0b00001111
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				next_byte_high_bits = next_byte_high_bits >> 4
 
 				if cpu.registers[low_bits] & 0b00000001 == 1 {
 					cpu.VF = 1
@@ -294,9 +309,12 @@ main :: proc() {
 				}
 
 				cpu.registers[low_bits] /= 2
+
 			case 0x7:
 				low_bits := ram[cpu.program_counter] & 0b00001111
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+				next_byte_high_bits = next_byte_high_bits >> 4
 
 				if cpu.registers[next_byte_high_bits] > cpu.registers[low_bits] {
 					cpu.VF = 1
@@ -310,6 +328,8 @@ main :: proc() {
 				low_bits := ram[cpu.program_counter] & 0b00001111
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
 
+				next_byte_high_bits = next_byte_high_bits >> 4
+
 				if cpu.registers[low_bits] & 0b10000000 == 128 {
 					cpu.VF = 1
 				} else {
@@ -318,10 +338,13 @@ main :: proc() {
 
 				cpu.registers[low_bits] /= 2
 			}
+
 		case SNE_vx_vy:
 			low_bits := ram[cpu.program_counter] & 0b00001111
 
 			next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
+
+			next_byte_high_bits = next_byte_high_bits >> 4
 
 			if cpu.registers[low_bits] != cpu.registers[next_byte_high_bits] {
 				cpu.program_counter += 2
@@ -338,7 +361,6 @@ main :: proc() {
 			low_bits := ram[cpu.program_counter] & 0b00001111
 
 			cpu.registers[low_bits] = num & ram[cpu.program_counter + 1]
-
 
 		//@TODO collision
 		case DRW_vx_vy:
@@ -367,32 +389,55 @@ main :: proc() {
 			fmt.println(x, y, n)
 			print(cpu.I)
 			display_sprite(n, cpu.I, vx, vy)
-			sdl2.RenderPresent(renderer)
 
 			fmt.print("here")
-			event: sdl2.Event
-			for sdl2.WaitEvent(&event) {
-				#partial switch event.type {
-				case .QUIT:
-					return
-				case .KEYDOWN:
-					if event.key.keysym.scancode == sdl2.SCANCODE_Q {
-						return
-					}
+
+		case 0xF0:
+			x := ram[cpu.program_counter] & 0b00001111
+			vx := u16(cpu.registers[x])
+
+			switch ram[cpu.program_counter + 1] {
+			case 0x07:
+				cpu.registers[x] = cpu.delay
+
+			case 0x1E:
+				cpu.I += vx
+
+			case 0x29:
+				print("0x29")
+
+				addr: u16
+				switch {
+				case vx == 0:
+					addr = 0
+				case vx == 1:
+					addr = 5
+				case:
+					addr = vx * 5 + 0
+					print("*:::" ,addr)
 				}
 
+				print(addr)
+				cpu.I = addr
 			}
 
+		case 0x00:
+			switch ram[cpu.program_counter + 1] {
+			case CLR:
+				print("CLR")
+				sdl2.SetRenderDrawColor(renderer, 255, 255, 255, 255)
+				sdl2.RenderClear(renderer)
+				sdl2.SetRenderDrawColor(renderer, 0, 0, 0, 255)
+
+			case RET:
+				print("RET")
+				cpu.program_counter = stack[cpu.stack_pointer]
+				cpu.stack_pointer -= 1
+			}
 		}
-			
 
 		cpu.program_counter += 2
-			
-
-		//operation := bits.bitfield_extract_u8(byte, 0, 8)
-		//fmt.printf("HEX: {:8b}", operation)
+		sdl2.RenderPresent(renderer)
+		time.sleep(16 * 1000 * 1000)
 	}
-
-
 }
-
