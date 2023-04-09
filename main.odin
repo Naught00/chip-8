@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:math/rand"
 import "core:time"
 import "vendor:sdl2"
+import ma "vendor:miniaudio"
 
 print :: fmt.println
 
@@ -58,6 +59,7 @@ Cpu :: struct {
 	delay: u8,
 	program_counter: u16,
 	stack_pointer: u8,
+	sound: u8
 }
 
 cpu_set_register_I :: proc(using cpu: ^Cpu, val: u16) {
@@ -71,7 +73,7 @@ get_value :: proc(pc: u16) -> u16 {
 	fmt.printf("low: {:8b}\n", low_bits)
 	fmt.printf("HEX: {:8b}\n", next_byte)
 
-	value :u16 = u16(low_bits) << 8 | u16(next_byte)
+	value: u16 = u16(low_bits) << 8 | u16(next_byte)
 
 	fmt.printf("HEX: {:X}\n", value)
 	return value
@@ -98,13 +100,18 @@ main :: proc() {
 	if len(os.args) > 1 do filename = os.args[1]
 
 	// @DEBUG
-	filename = "programs/fizz.ch8"
+	filename = "programs/rocket.ch8"
 	program, success := os.read_entire_file_from_filename(filename)
 
 	if !success {
 		fmt.eprintln("Invalid filename") 
 		os.exit(1)
 	}
+
+	engine: ma.engine
+	ma.engine_init(nil, &engine)
+
+	//ma.engine_play_sound(&engine, "sound.wav", nil)
 
 	cpu: Cpu
 
@@ -116,14 +123,14 @@ main :: proc() {
 		fmt.printf("{:X} ", x)
 	}
 
+//	if true {
+//		os.exit(1)
+//	}
+
 	// @DEBUG
-	prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0xF2, 0x33, 0xF2, 0x55}
+	prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0xF2, 0x33, 0xF5, 0x55, 0xF2, 0x65}
 
-	cpu.registers[0] = 255
-	cpu.registers[1] = 255
-	cpu.registers[2] = 255
-
-	load_program(prog)
+	load_program(program)
 	load_sprites()
 	print_ram()
 
@@ -142,8 +149,8 @@ main :: proc() {
 	//	i += 5
 	//}
 
-	sdl2.RenderPresent(renderer)
 
+	i: int = 0
 	for cpu.program_counter < u16(len(program)) + 0x200 {
 		event: sdl2.Event
 		for sdl2.PollEvent(&event) {
@@ -161,7 +168,7 @@ main :: proc() {
 
 		operation := ram[cpu.program_counter] & 0b11110000
 		
-		fmt.printf("HEX: {:X}\n", operation)
+		fmt.printf("Operation HEX: {:X}\n", operation)
 
 		switch operation {
 		case LD_I_addr:
@@ -173,6 +180,7 @@ main :: proc() {
 			cpu.program_counter = get_value(cpu.program_counter)
 			print("pc : ", cpu.program_counter)
 			fmt.printf("pc {:X} ", cpu.program_counter)
+			continue
 
 			//@HACK
 			//os.exit(0)
@@ -180,6 +188,7 @@ main :: proc() {
 		case CALL_addr:
 			cpu.stack_pointer += 1
 			stack[cpu.stack_pointer] = cpu.program_counter
+
 			cpu.program_counter = get_value(cpu.program_counter)
 			continue
 
@@ -277,14 +286,15 @@ main :: proc() {
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
 				next_byte_high_bits = next_byte_high_bits >> 4
 
-				temp := cpu.registers[low_bits] + cpu.registers[next_byte_high_bits]
+				temp :u16 = u16(cpu.registers[low_bits]) + u16(cpu.registers[next_byte_high_bits])
 				if temp > 255 {
 					cpu.VF = 1
 				} else {
 					cpu.VF = 0
 				}
 
-				cpu.registers[low_bits] = temp & 0b00001111
+				//@TEST
+				cpu.registers[low_bits] = u8(temp)
 
 			case 0x5:
 				low_bits := ram[cpu.program_counter] & 0b00001111
@@ -340,7 +350,7 @@ main :: proc() {
 					cpu.VF = 0
 				}
 
-				cpu.registers[low_bits] /= 2
+				cpu.registers[low_bits] *= 2
 			}
 
 		case SNE_vx_vy:
@@ -368,6 +378,7 @@ main :: proc() {
 
 		//@TODO collision
 		case DRW_vx_vy:
+			cpu.VF = 0
 			x := ram[cpu.program_counter] & 0b00001111
 			y := ram[cpu.program_counter + 1] & 0b11110000
 			print("y", y)
@@ -388,13 +399,50 @@ main :: proc() {
 				vy %= 32
 			}
 
-			cpu.VF = 0
 
-			fmt.println(x, y, n)
+			fmt.println("CORDS")
+			fmt.println(vx, vy, n)
 			print(cpu.I)
-			display_sprite(n, cpu.I, vx, vy)
+
+			print("BEFORE:", cpu.VF)
+			display_sprite(&cpu, n, cpu.I, vx, vy)
+			print("AFTER", cpu.VF)
 
 			fmt.print("here")
+
+		case 0xE0:
+			switch ram[cpu.program_counter + 1] {
+			//SKP
+			case 0x9E:
+
+				keys := sdl2.GetKeyboardState(nil)
+				low_bits := ram[cpu.program_counter] & 0b00001111
+
+				key := cpu.registers[low_bits]
+
+				print("key", key)
+
+
+				scancode := get_scancode(key)
+				if bool(keys[scancode]) {
+					cpu.program_counter += 2
+				}
+				print("SCAN!")
+
+			//SKNP
+			case 0xA1:
+				keys := sdl2.GetKeyboardState(nil)
+				low_bits := ram[cpu.program_counter] & 0b00001111
+
+				key := cpu.registers[low_bits]
+
+
+				scancode := get_scancode(key)
+				if !bool(keys[scancode]) {
+					cpu.program_counter += 2
+				}
+			}
+
 
 		case 0xF0:
 			x := ram[cpu.program_counter] & 0b00001111
@@ -404,6 +452,27 @@ main :: proc() {
 			switch ram[cpu.program_counter + 1] {
 			case 0x07:
 				cpu.registers[x] = cpu.delay
+
+			case 0x0A:
+				print("wait")
+				time.sleep(1000 * 1000 * 1000)
+				//event: sdl2.Event
+				//for sdl2.WaitEvent(&event) {
+				//	#partial switch event.type {
+				//	case .QUIT:
+				//	case .KEYDOWN:
+				//		if event.key.keysym.scancode == sdl2.SCANCODE_F {
+				//			break
+
+				//		}
+				//	}
+				//}
+
+			case 0x15:
+				cpu.delay = cpu.registers[x]
+
+			case 0x18:
+				cpu.sound = cpu.registers[x]
 
 			case 0x1E:
 				cpu.I += vx
@@ -449,6 +518,13 @@ main :: proc() {
 					ram[cpu.I + u16(i)] = cpu.registers[i]
 				}
 
+			case 0x65:
+				x := ram[cpu.program_counter] & 0b00001111
+
+				for i in 0..=x {
+					cpu.registers[i] = ram[cpu.I + u16(i)]
+				}
+
 			}
 
 		case 0x00:
@@ -468,7 +544,12 @@ main :: proc() {
 
 		cpu.program_counter += 2
 		sdl2.RenderPresent(renderer)
-		print_ram()
-		time.sleep(1000 * 1000 * 1000)
+
+		if cpu.delay > 0 {
+			cpu.delay -= 1
+		}
+
+		time.sleep(1 * 1000 * 1000)
+
 	}
 }
