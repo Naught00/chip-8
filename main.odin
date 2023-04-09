@@ -49,9 +49,6 @@ sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
 stack: [16]u16
 ram: [4096]u8
 
-window: ^sdl2.Window
-renderer: ^sdl2.Renderer
-
 Cpu :: struct {
 	registers: [16]u8,
 	I: u16,
@@ -100,7 +97,7 @@ main :: proc() {
 	if len(os.args) > 1 do filename = os.args[1]
 
 	// @DEBUG
-	filename = "programs/chip8-test-suite.ch8"
+	//filename = "programs/invaders.ch8"
 	program, success := os.read_entire_file_from_filename(filename)
 
 	if !success {
@@ -123,12 +120,8 @@ main :: proc() {
 		fmt.printf("{:X} ", x)
 	}
 
-//	if true {
-//		os.exit(1)
-//	}
-
 	// @DEBUG
-	prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0xF2, 0x33, 0xF5, 0x55, 0xF2, 0x65}
+	//prog := []u8{0xF2, 0x29, 0xD0, 0x15, 0x00, 0xE0, 0xF2, 0x33, 0xF5, 0x55, 0xF2, 0x65}
 
 	load_program(program)
 	load_sprites()
@@ -143,14 +136,6 @@ main :: proc() {
 		sdl2.DestroyRenderer(renderer)
 	}
 
-	//i :u16 = 0
-	//for _ in 0..<15 {
-	//	display_sprite(5, 0x0 + i, 0 + u8(i), 10)
-	//	i += 5
-	//}
-
-
-	i: int = 0
 	for cpu.program_counter < u16(len(program)) + 0x200 {
 		event: sdl2.Event
 		for sdl2.PollEvent(&event) {
@@ -182,9 +167,6 @@ main :: proc() {
 			fmt.printf("pc {:X} ", cpu.program_counter)
 			continue
 
-			//@HACK
-			//os.exit(0)
-
 		case CALL_addr:
 			cpu.stack_pointer += 1
 			stack[cpu.stack_pointer] = cpu.program_counter
@@ -198,11 +180,6 @@ main :: proc() {
 
 			fmt.printf("low {:8b} ", low_bits)
 			print(low_bits)
-
-			// Not sure yet
-			//low_bits = low_bits << 4
-			//fmt.printf("low {:8b} ", low_bits)
-			//print(low_bits)
 
 			next_byte := ram[cpu.program_counter + 1]
 
@@ -381,7 +358,7 @@ main :: proc() {
 
 			cpu.registers[low_bits] = num & ram[cpu.program_counter + 1]
 
-		//@TODO collision
+		//@TODO Better collision
 		case DRW_vx_vy:
 			cpu.registers[0xF] = 0
 			x := ram[cpu.program_counter] & 0b00001111
@@ -403,7 +380,6 @@ main :: proc() {
 			if vy > 31 {
 				vy %= 32
 			}
-
 
 			fmt.println("CORDS")
 			fmt.println(vx, vy, n)
@@ -461,6 +437,7 @@ main :: proc() {
 			case 0x0A:
 				print("wait")
 				time.sleep(1000 * 1000 * 1000)
+				//@TODO wait for key press
 				//event: sdl2.Event
 				//for sdl2.WaitEvent(&event) {
 				//	#partial switch event.type {
@@ -554,7 +531,7 @@ main :: proc() {
 			cpu.delay -= 1
 		}
 
-		time.sleep(3 * 1000 * 1000)
+		time.sleep(1 * 1000 * 1000)
 
 	}
 }

@@ -5,6 +5,8 @@ import "vendor:miniaudio"
 import "core:fmt"
 
 pixels: [32][64]bool
+window: ^sdl2.Window
+renderer: ^sdl2.Renderer
 
 display_init :: proc() -> (^sdl2.Renderer, ^sdl2.Window) {
 	assert(sdl2.Init(sdl2.INIT_VIDEO) == 0, sdl2.GetErrorString())
@@ -31,12 +33,12 @@ display_init :: proc() -> (^sdl2.Renderer, ^sdl2.Window) {
 
 
 display_draw :: proc(cpu: ^Cpu, x: i32, y: i32) {
-
 	x := x
 	y := y
 
 	x *= 10
 	y *= 10
+
 	for i in x..<(x + 9) {
 		for j in y..<(y + 9) {
 			sdl2.RenderDrawPoint(renderer, i, j)
@@ -52,15 +54,15 @@ display_sprite :: proc(cpu: ^Cpu, n: u8, I: u16, x, y:u8) {
 	} else {
 		pixels[y][x] = true
 		sdl2.SetRenderDrawColor(renderer, 0, 0, 0, 255)
-		cpu.registers[0xF] = 0
 	}
+
 	for i, j in I..<I+u16(n) {
 		byte := ram[i]
 
 		mask: u8 = 128
 		for i in 0..=7 {
 			if bool(byte & mask) { 
-				display_draw(cpu, i32(x + u8(i)), i32(y + u8(j)))
+				display_draw(cpu, i32(x + u8(i)) % 64, i32(y + u8(j)) % 32)
 			}
 			mask /= 2 
 		}
