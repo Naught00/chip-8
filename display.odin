@@ -48,11 +48,11 @@ display_sprite :: proc(cpu: ^Cpu, n: u8, I: u16, x, y:u8) {
 	if pixels[y][x] {
 		sdl2.SetRenderDrawColor(renderer, 255, 255, 255, 255)
 		pixels[y][x] = false
-		cpu.VF = 1
+		cpu.registers[0xF] = 1
 	} else {
 		pixels[y][x] = true
 		sdl2.SetRenderDrawColor(renderer, 0, 0, 0, 255)
-		cpu.VF = 0
+		cpu.registers[0xF] = 0
 	}
 	for i, j in I..<I+u16(n) {
 		byte := ram[i]

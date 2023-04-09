@@ -100,7 +100,7 @@ main :: proc() {
 	if len(os.args) > 1 do filename = os.args[1]
 
 	// @DEBUG
-	filename = "programs/rocket.ch8"
+	filename = "programs/chip8-test-suite.ch8"
 	program, success := os.read_entire_file_from_filename(filename)
 
 	if !success {
@@ -288,9 +288,9 @@ main :: proc() {
 
 				temp :u16 = u16(cpu.registers[low_bits]) + u16(cpu.registers[next_byte_high_bits])
 				if temp > 255 {
-					cpu.VF = 1
+					cpu.registers[0xF] = 1
 				} else {
-					cpu.VF = 0
+					cpu.registers[0xF] = 0
 				}
 
 				//@TEST
@@ -301,14 +301,14 @@ main :: proc() {
 				next_byte_high_bits := ram[cpu.program_counter + 1] & 0b11110000
 
 				next_byte_high_bits = next_byte_high_bits >> 4
+				cpu.registers[low_bits] -= cpu.registers[next_byte_high_bits] 
 
 				if cpu.registers[low_bits] > cpu.registers[next_byte_high_bits] {
-					cpu.VF = 1
+					cpu.registers[0xF] = 1
 				} else {
-					cpu.VF = 0
+					cpu.registers[0xF] = 0
 				}
 
-				cpu.registers[low_bits] -= cpu.registers[next_byte_high_bits] 
 
 			case 0x6:
 				low_bits := ram[cpu.program_counter] & 0b00001111
@@ -316,13 +316,16 @@ main :: proc() {
 
 				next_byte_high_bits = next_byte_high_bits >> 4
 
+
 				if cpu.registers[low_bits] & 0b00000001 == 1 {
-					cpu.VF = 1
+					cpu.registers[low_bits] /= 2
+					cpu.registers[0xF] = 1
 				} else {
-					cpu.VF = 0
+					cpu.registers[0xF] = 0
+					cpu.registers[low_bits] /= 2
 				}
 
-				cpu.registers[low_bits] /= 2
+
 
 			case 0x7:
 				low_bits := ram[cpu.program_counter] & 0b00001111
@@ -330,13 +333,14 @@ main :: proc() {
 
 				next_byte_high_bits = next_byte_high_bits >> 4
 
+				cpu.registers[low_bits] = cpu.registers[next_byte_high_bits] - cpu.registers[low_bits]
+
 				if cpu.registers[next_byte_high_bits] > cpu.registers[low_bits] {
-					cpu.VF = 1
+					cpu.registers[0xF] = 1
 				} else {
-					cpu.VF = 0
+					cpu.registers[0xF] = 0
 				}
 
-				cpu.registers[low_bits] = cpu.registers[next_byte_high_bits] - cpu.registers[low_bits]
 
 			case 0xE:
 				low_bits := ram[cpu.program_counter] & 0b00001111
@@ -345,12 +349,13 @@ main :: proc() {
 				next_byte_high_bits = next_byte_high_bits >> 4
 
 				if cpu.registers[low_bits] & 0b10000000 == 128 {
-					cpu.VF = 1
+					cpu.registers[low_bits] *= 2
+					cpu.registers[0xF] = 1
 				} else {
-					cpu.VF = 0
+					cpu.registers[0xF] = 0
+					cpu.registers[low_bits] *= 2
 				}
 
-				cpu.registers[low_bits] *= 2
 			}
 
 		case SNE_vx_vy:
@@ -378,7 +383,7 @@ main :: proc() {
 
 		//@TODO collision
 		case DRW_vx_vy:
-			cpu.VF = 0
+			cpu.registers[0xF] = 0
 			x := ram[cpu.program_counter] & 0b00001111
 			y := ram[cpu.program_counter + 1] & 0b11110000
 			print("y", y)
@@ -549,7 +554,7 @@ main :: proc() {
 			cpu.delay -= 1
 		}
 
-		time.sleep(1 * 1000 * 1000)
+		time.sleep(3 * 1000 * 1000)
 
 	}
 }
