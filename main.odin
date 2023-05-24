@@ -26,8 +26,6 @@ RND_vx_byte :: 0xC0
 DRW_vx_vy   :: 0xD0
 LD_vx_delay :: 0xF0 
 	
-
-/* Sprites */
 sprites: []u8 = {0xF0, 0x90, 0x90, 0x90, 0xF0,
 		0x20, 0x60, 0x20, 0x20, 0x70,
 		0xF0, 0x10, 0xF0, 0x80, 0xF0,
@@ -99,6 +97,7 @@ main :: proc() {
 	// @DEBUG
 	//filename = "programs/invaders.ch8"
 	program, success := os.read_entire_file_from_filename(filename)
+	defer delete(program)
 
 	if !success {
 		fmt.eprintln("Invalid filename") 
